@@ -32,12 +32,13 @@ class Cars:
         self.t  = 0
         self.x  = []
         self.v  = []
-        self.c  = []
+        self.c  = []      # seems to be color
         for i in range(numCars):
+
             # TODO: Set the initial position for each car.
             # Note that the ordering of the cars on the road needs to match
             # the order in which you compute the distances between cars
-            self.x.append()         # the position of the cars on the road
+            self.x.append(i)         # the position of the cars on the road
             self.v.append(v0)       # the speed of the cars
             self.c.append(i)        # the color of the cars (for drawing)
 
@@ -45,6 +46,7 @@ class Cars:
     def distance(self, i):
         # TODO: Implement the function returning the PERIODIC distance 
         # between car i and the one in front 
+        return (self.x[(i+1)%self.numCars] - self.x[i])%self.roadLength   # i tweeked it a bit so that it becomes periodic
 
 
 class Observables:
@@ -54,6 +56,8 @@ class Observables:
     def __init__(self):
         self.time = []          # list to store time
         self.flowrate = []      # list to store the flow rate
+        self.history = [] # contains all historic positions
+
         
 
 class BasePropagator:
@@ -68,8 +72,11 @@ class BasePropagator:
         fr = self.timestep(cars, obs)
 
         # Append observables to their lists
-        obs.time.append(cars.t)
+        obs.time.append(cars.t) # where should the time be updated?
         obs.flowrate.append(fr)
+        obs.history.append(cars.x.copy())
+        
+
               
     def timestep(self, cars, obs):
 
@@ -91,11 +98,6 @@ class ConstantPropagator(BasePropagator) :
         cars.t += 1
         return 0
 
-# TODO
-# HERE YOU SHOULD IMPLEMENT THE DIFFERENT CAR BEHAVIOR RULES
-# Define you own class which inherits from BasePropagator (e.g. MyPropagator(BasePropagator))
-# and implement timestep according to the rule described in the project
-
 class MyPropagator(BasePropagator) :
 
     def __init__(self, vmax, p):
@@ -104,7 +106,39 @@ class MyPropagator(BasePropagator) :
         self.p = p
 
     def timestep(self, cars, obs):
+
         # TODO Here you should implement the car behaviour rules
+
+        for i in range(cars.numCars): 
+            # increase velocity 
+            if cars.v[i] < self.vmax: 
+                cars.v[i] += 1
+        
+        for i in range(cars.numCars): 
+            # copmute distances and reduce velocities
+            d = cars.distance(i)
+            if cars.v[i] >= d: 
+                cars.v[i] = d - 1
+        
+        for i in range(cars.numCars):
+            # probability decrease speed  
+            
+            r = rng.binomial(1, self.p)
+            
+            if r and cars.v[i] > 0: 
+                cars.v[i] -= 1
+
+        for i in range(cars.numCars): 
+            # update all positions 
+            cars.x[i] += cars.v[i]
+            
+        v = np.array(cars.v)
+        flowrate = np.sum(v) / cars.roadLength
+        
+        cars.t += 1
+        return flowrate
+        
+
 
 ############################################################################################
 
@@ -141,7 +175,20 @@ class Simulation:
     def __init__(self, cars=Cars()) :
         self.reset(cars)
 
+    def plot_history(self, title="simulation"): 
+        plt.clf()
+        plt.title(title)
+        self.obs.history = np.array(self.obs.history).transpose()
+        for i in range(self.cars.numCars): 
+            plt.plot(self.obs.time, self.obs.history[i][:])
+        plt.xlabel('time')
+        plt.ylabel('position')
+        plt.savefig(title + ".pdf")
+        plt.show()
+
+
     def plot_observables(self, title="simulation"):
+
         plt.clf()
         plt.title(title)
         plt.plot(self.obs.time, self.obs.flowrate)
@@ -151,8 +198,7 @@ class Simulation:
         plt.show()
 
     # Run without displaying any animation (fast)
-    def run(self,
-            propagator,
+    def run(self,propagator,
             numsteps=200,           # final time
             title="simulation",     # Name of output file and title shown at the top
             ):
@@ -160,7 +206,7 @@ class Simulation:
         for it in range(numsteps):
             propagator.propagate(self.cars, self.obs)
 
-        self.plot_observables(title)
+        #self.plot_observables(title)
 
     # Run while displaying the animation of bunch of cars going in circe (slow-ish)
     def run_animate(self,
@@ -185,7 +231,7 @@ class Simulation:
         # the following figures comment out the next line 
         # plt.waitforbuttonpress(30)
 
-        self.plot_observables(title)
+        #self.plot_observables(title)
     
 
 # It's good practice to encapsulate the script execution in 
@@ -196,18 +242,102 @@ def main() :
     # and pass them to the simulator 
 
     # Be sure you are passing the correct initial conditions!
-    cars = Cars(numCars = 5, roadLength=50)
+    cars = Cars(numCars = 30, roadLength=50)
 
     # Create the simulation object for your cars instance:
     simulation = Simulation(cars)
 
     # simulation.run_animate(propagator=ConstantPropagator())
-    simulation.run_animate(propagator=MyPropagator(vmax=2, p=0.2))
+    simulation.run_animate(propagator=MyPropagator(vmax=2, p=0.5))
+
+def ex2a(): 
+    road_length = 50
+    densities = np.linspace(0.1, 1, 500)  # Different densities from 0.1 to 1
+    average_flow_rates = []
+
+    for density in densities:
+        num_cars = int(road_length * density)
+        cars = Cars(numCars=num_cars, roadLength=road_length)
+        simulation = Simulation(cars)
+        propagator = MyPropagator(vmax=2, p=0.5)
+        simulation.run(propagator=propagator, numsteps=1000)
+        
+        # Calculate average flow rate after the system has equilibrated
+        equilibration_time = 100  # Assuming equilibration time
+        average_flow_rate = np.mean(simulation.obs.flowrate[equilibration_time:])
+        average_flow_rates.append(average_flow_rate)
+    
+    plt.figure(figsize=(10, 6))
+    plt.plot(densities, average_flow_rates, marker='o')
+    plt.title("Average Flow Rate vs Car Density")
+    plt.xlabel("Car Density")
+    plt.ylabel("Average Flow Rate")
+    plt.grid(True)
+    plt.show()
+
+def run_simulation(num_cars, road_length, vmax, p, num_steps):
+    cars = Cars(numCars=num_cars, roadLength=road_length)
+    simulation = Simulation(cars)
+    propagator = MyPropagator(vmax=vmax, p=p)
+    simulation.run(propagator=propagator, numsteps=num_steps)
+    return simulation.obs.flowrate  # Average over the last 100 time steps
+
+def estimate_statistical_accuracy(target_standard_error, max_simulations=1000):
+    road_length = 50
+    num_cars = 25
+    vmax = 2
+    p = 0.5
+    num_steps = 200  # Including time for equilibration
+    flow_rates = []
+    standard_errors = []
+
+    for _ in range(max_simulations):
+        n = run_simulation(num_cars, road_length, vmax, p, num_steps)
+        flow_rate = np.mean(n[-100:])
+        flow_rates.append(flow_rate)
+        current_standard_error = np.std(flow_rates)/ np.sqrt(len(flow_rates) - 1)   # becomes the same formula
+        standard_errors.append(current_standard_error)
+        if current_standard_error < target_standard_error:
+            break
+
+    return flow_rates, standard_errors, current_standard_error
+
+def ex2b(): 
+    target_standard_error = 0.001
+    flow_rates, standard_errors, achieved_standard_error = estimate_statistical_accuracy(target_standard_error)
+    print("Achieved Standard Error:", achieved_standard_error)
+    print("Number of Simulations:", len(flow_rates))
+
+    plt.figure(figsize=(10, 6))
+    x = range(1, len(flow_rates) + 1)
+    plt.plot(x, standard_errors, marker='o')
+    plt.title("Standarderror over amount of simulations")
+    plt.xlabel("Simulations")
+    plt.ylabel("Standard error")
+    plt.grid(True)
+    plt.show()
+
+def ex2c(): 
+    lenghts = np.linspace(1, 100, 1)
+    for l in lenghts: 
+        print(l)
+        # create fundamenal diagram 
+        densities = np.linspace(0.1, 1, 100)
+        for d in densities: 
+            vmax = 2
+            p = 0.5
+            num_steps = 1000
+            numcars = int(densities * l)
+            flow_rate = run_simulation(numcars, l, vmax, p, num_steps)
+
+
+
+
 
 
 # Calling 'main()' if the script is executed.
 # If the script is instead just imported, main is not called (this can be useful if you want to
 # write another script importing and utilizing the functions and classes defined in this one)
 if __name__ == "__main__" :
-    main()
+    ex2b()
 
