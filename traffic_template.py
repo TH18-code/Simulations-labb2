@@ -232,7 +232,7 @@ class Simulation:
         # plt.waitforbuttonpress(30)
 
         #self.plot_observables(title)
-    
+
 
 # It's good practice to encapsulate the script execution in 
 # a main() function (e.g. for profiling reasons)
@@ -251,7 +251,7 @@ def main() :
     simulation.run_animate(propagator=MyPropagator(vmax=2, p=0.5))
 
 def ex2a(): 
-    road_length = 50
+    road_length = 40
     densities = np.linspace(0.1, 1, 500)  # Different densities from 0.1 to 1
     average_flow_rates = []
 
@@ -280,14 +280,15 @@ def run_simulation(num_cars, road_length, vmax, p, num_steps):
     simulation = Simulation(cars)
     propagator = MyPropagator(vmax=vmax, p=p)
     simulation.run(propagator=propagator, numsteps=num_steps)
-    return simulation.obs.flowrate  # Average over the last 100 time steps
+    #simulation.plot_history()
+    return simulation.obs.flowrate  
 
 def estimate_statistical_accuracy(target_standard_error, max_simulations=1000):
     road_length = 50
     num_cars = 25
     vmax = 2
     p = 0.5
-    num_steps = 200  # Including time for equilibration
+    num_steps = 500  # Including time for equilibration
     flow_rates = []
     standard_errors = []
 
@@ -317,19 +318,86 @@ def ex2b():
     plt.grid(True)
     plt.show()
 
-def ex2c(): 
-    lenghts = np.linspace(1, 100, 1)
+
+def fundamental_diagram(road_length, densities, v=2, p=0.5): 
+    # returns the average flowrates for different densities, which makes it easy to plot the fundamental diagram
+    average_flow_rates = []
+
+    for density in densities:
+        num_cars = int(road_length * density)
+        cars = Cars(numCars=num_cars, roadLength=road_length)
+        simulation = Simulation(cars)
+        propagator = MyPropagator(vmax=v, p=p)  # these used to be vmax = 2, p = 0.5
+        simulation.run(propagator=propagator, numsteps=1000)
+        
+        # Calculate average flow rate after the system has equilibrated
+        equilibration_time = 100  # Assuming equilibration time
+        average_flow_rate = np.mean(simulation.obs.flowrate[-300:]) # this used to be indexed equilibration_time:
+        average_flow_rates.append(average_flow_rate)
+
+    return average_flow_rates
+
+def ex2c(): # denna blir fel just nu, fattar inte vad som inte funkar. 
+    plt.figure(figsize=(10, 6))
+    lenghts = np.linspace(1, 100, 5)
+    densities = np.linspace(0.1, 1, 50) 
+
     for l in lenghts: 
         print(l)
-        # create fundamenal diagram 
-        densities = np.linspace(0.1, 1, 100)
-        for d in densities: 
-            vmax = 2
-            p = 0.5
-            num_steps = 1000
-            numcars = int(densities * l)
-            flow_rate = run_simulation(numcars, l, vmax, p, num_steps)
+        mean_flow_rates = fundamental_diagram(l, densities)
 
+        plt.plot(densities, mean_flow_rates)
+    
+    plt.show()
+        
+
+
+def plot_fundamental_diagrams(lengths=[20, 40, 60, 80, 100,150, 200, 250, 300]):
+    densities = np.linspace(0.1, 1, 50)  # Common densities for all lengths
+
+    for road_length in lengths:
+        average_flow_rates = []
+
+        for density in densities:
+            num_cars = int(road_length * density)
+            cars = Cars(numCars=num_cars, roadLength=road_length)
+            simulation = Simulation(cars)
+            propagator = MyPropagator(vmax=2, p=0.5)
+            simulation.run(propagator=propagator, numsteps=1000)
+
+            # Calculate and append the average flow rate
+            # Assuming you have a way to calculate this in your code
+            average_flow_rate = np.mean(simulation.obs.flowrate[-100:]) # ändra denna till fler steg bakåt för att få mindre fluktuationer
+
+
+            average_flow_rates.append(average_flow_rate)
+
+        plt.plot(densities, average_flow_rates, label=f'Length {road_length}')
+
+    plt.xlabel('Density')
+    plt.ylabel('Flow')
+    plt.title('Fundamental Diagrams for Different Road Lengths')
+    plt.legend()
+    plt.show()
+
+
+
+
+def ex2d(): 
+    # can also be modified for task e
+    densities = np.linspace(0.1, 1, 100)  # Common densities for all lengths
+    velocities = [1,2,5]
+    probs = [0.2,0.5,0.8]
+    
+    for v in velocities: 
+        mean_flow_rates = fundamental_diagram(200, densities, v=v, p=0.5)
+
+        plt.plot(densities, mean_flow_rates, label=f'v_max = {v}')
+
+    plt.xlabel('Density')
+    plt.ylabel('Flow')
+    plt.legend()
+    plt.show()
 
 
 
@@ -339,5 +407,14 @@ def ex2c():
 # If the script is instead just imported, main is not called (this can be useful if you want to
 # write another script importing and utilizing the functions and classes defined in this one)
 if __name__ == "__main__" :
-    ex2b()
+    #run_simulation(10, 50, 2, 0.5, 50)
+    ex2d()
+    #plot_fundamental_diagrams()
 
+"""om komplettering på det där med många fundamentaldiagram 
+runna 
+plot_fundemental_diagrams()
+
+gå in i fuktionen och gör så att man tar medelvärdet över en mkt längre tid så borde det nog bli en mkt 
+jämnare graf:) 
+"""
